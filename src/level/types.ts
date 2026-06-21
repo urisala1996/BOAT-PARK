@@ -32,6 +32,21 @@ export interface GoalDef {
   h: number;
 }
 
+// A rectangular patch scattered with rocks (deterministic from its position/size).
+export interface RockFieldDef {
+  x: number; // centre, metres
+  y: number;
+  w: number;
+  h: number;
+  angle?: number;
+}
+
+export interface LighthouseDef {
+  x: number; // metres
+  y: number;
+  radius?: number; // base radius (obstacle), metres; default ~2.5
+}
+
 export interface Level {
   name: string;
   bounds: { w: number; h: number }; // world size, metres
@@ -39,4 +54,6 @@ export interface Level {
   goal: GoalDef; // seaport target zone
   walls: WallDef[];
   boats: BoatDef[];
+  rocks?: RockFieldDef[];
+  lighthouses?: LighthouseDef[];
 }

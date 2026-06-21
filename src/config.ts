@@ -62,6 +62,12 @@ export const COLORS = {
   playerAccent2: 0xf3a712,
   line: 0x18242b,
   shadow: 0x0c2230,
+  rock: 0xb4bcc0,
+  rockTop: 0xccd2d5,
+  lightTower: 0xffffff,
+  lightBand: 0xd64545,
+  lightGlow: 0xffd166,
+  lightBase: 0xa7adb0,
   // HUD
   hud: 0x18242b,
   hudMuted: 0x6b8290,

@@ -91,8 +91,16 @@ the editor. To ship a new port: export JSON from the editor and drop it in `maps
 A single module: renders the editable level into `renderer.world` (rebuilt on each change, reusing
 the `render/views.ts` builders) with its own pan/zoom camera, and overlays plain-DOM tools + a
 properties panel. You can trace a loaded map image (faint underlay, set its width in metres),
-draw docks/land/goal by drag, click-place boats and the start slip, select/move objects, fine-tune
-via the panel, grid-snap, and save / load / import / export JSON. It autosaves to `localStorage`.
+draw docks/land/goal/rock-fields by drag, click-place boats / start slip / lighthouses, select and
+**transform on canvas** (drag body to move, corner handles to resize, the top handle to rotate, the
+side handle for a lighthouse radius — `geom()`/`handles()`/`doResize`/`doRotate`/`doRadius`), fine-tune
+via the panel, grid-snap (1 m / 15°), and save / load / import / export JSON. Autosaves to `localStorage`.
+Handle sizes are divided by the camera zoom so they stay a constant on-screen size.
+
+Element types beyond walls/boats: **rock fields** (`RockFieldDef`) scatter many small circle
+obstacles deterministically (`entities/rocks.ts`, shared by physics + views so they match), and
+**lighthouses** (`LighthouseDef`) are a circular obstacle drawn as a banded tower. Both are optional
+arrays on `Level`, added in `Game.build()` and the editor.
 
 ## Deploy
 

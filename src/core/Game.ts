@@ -10,13 +10,15 @@ import { PointerControls } from "../input/pointer.ts";
 import { GameState } from "../state/GameState.ts";
 import { GameLoop } from "./GameLoop.ts";
 import { attachCollisions } from "../physics/collision.ts";
-import { makeWall, makeObstacleBoat, makeGoal } from "../entities/bodies.ts";
+import { makeWall, makeObstacleBoat, makeGoal, makeRockBodies, makeLighthouse } from "../entities/bodies.ts";
 import {
   buildWater,
   buildGoal,
   buildBuoys,
   buildWall,
   buildObstacleBoat,
+  buildRockField,
+  buildLighthouse,
   buildPlayer,
   type PlayerView,
   type GoalView,
@@ -152,6 +154,14 @@ export class Game {
     for (const def of lv.boats) {
       this.physics.add(makeObstacleBoat(def));
       this.scene.addChild(buildObstacleBoat(def));
+    }
+    for (const def of lv.rocks ?? []) {
+      this.physics.add(makeRockBodies(def));
+      this.scene.addChild(buildRockField(def));
+    }
+    for (const def of lv.lighthouses ?? []) {
+      this.physics.add(makeLighthouse(def));
+      this.scene.addChild(buildLighthouse(def));
     }
 
     this.wake.reset();

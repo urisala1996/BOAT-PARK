@@ -1,7 +1,9 @@
 import { Container, Graphics, FillGradient } from "pixi.js";
 import { PIXELS_PER_METER as P, COLORS } from "../config.ts";
 import { hullVertices } from "../physics/hull.ts";
-import type { Level, WallDef, BoatDef, GoalDef } from "../level/types.ts";
+import { generateRocks } from "../entities/rocks.ts";
+import { LIGHTHOUSE_RADIUS } from "../entities/bodies.ts";
+import type { Level, WallDef, BoatDef, GoalDef, RockFieldDef, LighthouseDef } from "../level/types.ts";
 
 // Minimalist-but-polished vector views. Hull outlines reuse the exact physics geometry, and
 // every solid object gets a soft drop shadow for depth.
@@ -91,6 +93,56 @@ function buoy(x: number, y: number, color: number): Graphics {
   g.rect(-2, -16, 4, 8).fill(COLORS.line); // top mark
   g.position.set(x, y);
   return g;
+}
+
+export function buildRockField(def: RockFieldDef): Container {
+  const c = new Container();
+  for (const r of generateRocks(def)) {
+    const g = new Graphics();
+    const pts = r.verts.flatMap((v) => [v.x * P, v.y * P]);
+    const shadow = r.verts.flatMap((v) => [v.x * P + SH_X, v.y * P + SH_Y]);
+    g.poly(shadow).fill({ color: COLORS.shadow, alpha: 0.18 });
+    g.poly(pts).fill(COLORS.rock).stroke({ width: 1.5, color: COLORS.line });
+    // highlight cap
+    g.poly(r.verts.flatMap((v) => [v.x * P * 0.55, v.y * P * 0.55 - r.r * P * 0.15])).fill({
+      color: COLORS.rockTop,
+      alpha: 0.7,
+    });
+    g.position.set(r.x * P, r.y * P);
+    c.addChild(g);
+  }
+  return c;
+}
+
+export function buildLighthouse(def: LighthouseDef): Container {
+  const c = new Container();
+  c.position.set(def.x * P, def.y * P);
+  const r = (def.radius ?? LIGHTHOUSE_RADIUS) * P;
+  const g = new Graphics();
+  // rocky base
+  g.ellipse(SH_X, SH_Y, r, r * 0.9).fill({ color: COLORS.shadow, alpha: 0.18 });
+  g.circle(0, 0, r).fill(COLORS.lightBase).stroke({ width: 2, color: COLORS.line });
+  // soft light glow
+  g.circle(0, -r * 1.6, r * 1.4).fill({ color: COLORS.lightGlow, alpha: 0.28 });
+  // tower (tapered) pointing up
+  const tw = r * 0.7;
+  const th = r * 2.4;
+  g.poly([-tw / 2, 0, tw / 2, 0, tw * 0.34, -th, -tw * 0.34, -th])
+    .fill(COLORS.lightTower)
+    .stroke({ width: 2, color: COLORS.line });
+  // red bands
+  for (let i = 0; i < 2; i++) {
+    const y0 = -th * (0.28 + i * 0.34);
+    const y1 = y0 - th * 0.16;
+    const wTop = tw * (0.5 - (-y1 / th) * 0.16);
+    const wBot = tw * (0.5 - (-y0 / th) * 0.16);
+    g.poly([-wBot, y0, wBot, y0, wTop, y1, -wTop, y1]).fill(COLORS.lightBand);
+  }
+  // lantern room + cap
+  g.rect(-tw * 0.32, -th - r * 0.5, tw * 0.64, r * 0.5).fill(COLORS.lightGlow).stroke({ width: 2, color: COLORS.line });
+  g.poly([-tw * 0.4, -th - r * 0.5, tw * 0.4, -th - r * 0.5, 0, -th - r * 1.0]).fill(COLORS.lightBand);
+  c.addChild(g);
+  return c;
 }
 
 export function buildWall(def: WallDef): Container {

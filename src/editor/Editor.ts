@@ -14,18 +14,37 @@ import {
   buildBuoys,
   buildWall,
   buildObstacleBoat,
+  buildRockField,
+  buildLighthouse,
   buildPlayer,
 } from "../render/views.ts";
+import { LIGHTHOUSE_RADIUS } from "../entities/bodies.ts";
 import { saveLevel, saveCurrent, loadLevel, listLevelNames } from "../level/storage.ts";
 
-type Tool = "select" | "dock" | "land" | "boat" | "spawn" | "goal" | "erase" | "image";
+type Tool =
+  | "select"
+  | "dock"
+  | "land"
+  | "boat"
+  | "spawn"
+  | "goal"
+  | "rocks"
+  | "lighthouse"
+  | "erase"
+  | "image";
 type Sel =
   | { kind: "wall"; i: number }
   | { kind: "boat"; i: number }
+  | { kind: "rocks"; i: number }
+  | { kind: "lighthouse"; i: number }
   | { kind: "goal" }
   | { kind: "spawn" }
   | { kind: "image" }
   | null;
+
+const HANDLE_PX = 11; // on-screen handle size
+const HIT_PX = 16; // handle hit tolerance
+const ROT_OFF_PX = 26; // rotate handle distance above the box
 
 interface ImageMeta {
   dataUrl: string;
@@ -57,10 +76,14 @@ export class Editor {
   private cam = { x: 0, y: 0, zoom: 1 };
 
   // drag state
-  private action: "none" | "pan" | "move" | "draw" | "moveImage" = "none";
+  private action: "none" | "pan" | "move" | "draw" | "moveImage" | "resize" | "rotate" | "radius" =
+    "none";
   private startScreen = { x: 0, y: 0 };
   private moveOffset = { x: 0, y: 0 };
   private draftRect: { x: number; y: number; w: number; h: number } | null = null;
+  private activeHandle: { type: "corner" | "rotate" | "radius"; sx: number; sy: number } | null = null;
+  private resizeFixed = { x: 0, y: 0 };
+  private resizeAng = 0;
 
   // DOM
   private readonly root = document.createElement("div");
@@ -73,6 +96,8 @@ export class Editor {
     private readonly opts: EditorOptions,
   ) {
     this.level = structuredClone(level);
+    this.level.rocks ??= [];
+    this.level.lighthouses ??= [];
     renderer.world.addChild(this.scene);
     renderer.app.stage.eventMode = "static";
 
@@ -80,6 +105,26 @@ export class Editor {
     this.loadImageMeta();
     this.fitCamera();
     this.render();
+
+    // Dev-only hook for automated verification; stripped from production builds.
+    if (import.meta.env.DEV) {
+      (window as unknown as Record<string, unknown>).__ed = {
+        level: () => this.level,
+        selKind: () => this.sel?.kind ?? null,
+        toScreen: (xM: number, yM: number) => ({
+          x: this.cam.x + xM * P * this.cam.zoom,
+          y: this.cam.y + yM * P * this.cam.zoom,
+        }),
+        handleScreens: () =>
+          this.sel
+            ? this.handles(this.sel).map((h) => ({
+                type: h.type,
+                x: this.cam.x + h.x * P * this.cam.zoom,
+                y: this.cam.y + h.y * P * this.cam.zoom,
+              }))
+            : [],
+      };
+    }
 
     const stage = renderer.app.stage;
     stage.on("pointerdown", this.onDown);
@@ -148,6 +193,13 @@ export class Editor {
     switch (this.tool) {
       case "select":
       case "erase": {
+        if (this.tool === "select" && this.sel) {
+          const hb = this.hitHandle(m);
+          if (hb) {
+            this.startHandle(hb);
+            return;
+          }
+        }
         const hit = this.pick(m.x, m.y);
         if (this.tool === "erase") {
           if (hit) this.deleteSel(hit);
@@ -168,9 +220,21 @@ export class Editor {
       case "dock":
       case "land":
       case "goal":
+      case "rocks":
         this.action = "draw";
         this.draftRect = { x: m.x, y: m.y, w: 0, h: 0 };
         break;
+      case "lighthouse": {
+        const lh = { x: this.snapM(m.x), y: this.snapM(m.y), radius: LIGHTHOUSE_RADIUS };
+        this.level.lighthouses!.push(lh);
+        this.sel = { kind: "lighthouse", i: this.level.lighthouses!.length - 1 };
+        this.tool = "select";
+        this.syncTools();
+        this.updatePanel();
+        this.autosave();
+        this.render();
+        break;
+      }
       case "boat": {
         const b: BoatDef = { x: this.snapM(m.x), y: this.snapM(m.y), angle: 0, length: 5, beam: 2 };
         this.level.boats.push(b);
@@ -218,6 +282,15 @@ export class Editor {
       this.image.xM = this.snapM(m.x - this.moveOffset.x);
       this.image.yM = this.snapM(m.y - this.moveOffset.y);
       this.render();
+    } else if (this.action === "resize" && this.sel && this.activeHandle) {
+      this.doResize(m);
+      this.render();
+    } else if (this.action === "rotate" && this.sel) {
+      this.doRotate(m);
+      this.render();
+    } else if (this.action === "radius" && this.sel) {
+      this.doRadius(m);
+      this.render();
     }
   };
 
@@ -232,6 +305,9 @@ export class Editor {
         if (this.tool === "goal") {
           this.level.goal = { x: cx, y: cy, w, h };
           this.sel = { kind: "goal" };
+        } else if (this.tool === "rocks") {
+          this.level.rocks!.push({ x: cx, y: cy, w, h });
+          this.sel = { kind: "rocks", i: this.level.rocks!.length - 1 };
         } else {
           this.level.walls.push({ x: cx, y: cy, w, h, kind: this.tool === "dock" ? "dock" : "land" });
           this.sel = { kind: "wall", i: this.level.walls.length - 1 };
@@ -243,6 +319,7 @@ export class Editor {
       this.draftRect = null;
     }
     if (this.action === "moveImage") this.saveImageMeta();
+    this.activeHandle = null;
     this.action = "none";
     this.autosave();
     this.render();
@@ -250,12 +327,22 @@ export class Editor {
 
   // ---------- hit testing ----------
   private pick(x: number, y: number): Sel {
+    const lhs = this.level.lighthouses ?? [];
+    for (let i = lhs.length - 1; i >= 0; i--) {
+      const l = lhs[i];
+      if (Math.hypot(x - l.x, y - l.y) <= (l.radius ?? LIGHTHOUSE_RADIUS)) return { kind: "lighthouse", i };
+    }
     for (let i = this.level.boats.length - 1; i >= 0; i--) {
       const b = this.level.boats[i];
       if (inRect(x, y, b.x, b.y, b.length, b.beam, b.angle)) return { kind: "boat", i };
     }
     const sp = this.level.spawn;
     if (inRect(x, y, sp.x, sp.y, 5, 2, sp.angle)) return { kind: "spawn" };
+    const rocks = this.level.rocks ?? [];
+    for (let i = rocks.length - 1; i >= 0; i--) {
+      const r = rocks[i];
+      if (inRect(x, y, r.x, r.y, r.w, r.h, r.angle ?? 0)) return { kind: "rocks", i };
+    }
     for (let i = this.level.walls.length - 1; i >= 0; i--) {
       const w = this.level.walls[i];
       if (inRect(x, y, w.x, w.y, w.w, w.h, w.angle ?? 0)) return { kind: "wall", i };
@@ -267,6 +354,8 @@ export class Editor {
   private center(s: NonNullable<Sel>): { x: number; y: number } {
     if (s.kind === "wall") return this.level.walls[s.i];
     if (s.kind === "boat") return this.level.boats[s.i];
+    if (s.kind === "rocks") return this.level.rocks![s.i];
+    if (s.kind === "lighthouse") return this.level.lighthouses![s.i];
     if (s.kind === "goal") return this.level.goal;
     if (s.kind === "spawn") return this.level.spawn;
     return { x: this.image?.xM ?? 0, y: this.image?.yM ?? 0 };
@@ -279,6 +368,8 @@ export class Editor {
   private deleteSel(s: NonNullable<Sel>) {
     if (s.kind === "wall") this.level.walls.splice(s.i, 1);
     else if (s.kind === "boat") this.level.boats.splice(s.i, 1);
+    else if (s.kind === "rocks") this.level.rocks!.splice(s.i, 1);
+    else if (s.kind === "lighthouse") this.level.lighthouses!.splice(s.i, 1);
     else return; // goal/spawn are required, not deletable
     this.sel = null;
     this.updatePanel();
@@ -302,7 +393,9 @@ export class Editor {
     sc.addChild(buildGoal(this.level.goal).container);
     sc.addChild(buildBuoys(this.level.goal));
     for (const w of this.level.walls) sc.addChild(buildWall(w));
+    for (const r of this.level.rocks ?? []) sc.addChild(buildRockField(r));
     for (const b of this.level.boats) sc.addChild(buildObstacleBoat(b));
+    for (const lh of this.level.lighthouses ?? []) sc.addChild(buildLighthouse(lh));
     const sp = buildPlayer(5 * P, 2 * P);
     sp.container.position.set(this.level.spawn.x * P, this.level.spawn.y * P);
     sp.container.rotation = this.level.spawn.angle;
@@ -328,31 +421,126 @@ export class Editor {
     if (this.sel) sc.addChild(this.selectionOverlay(this.sel));
   }
 
+  // Geometry of a selection in metres (half extents + angle), used for handles + overlay.
+  private geom(s: NonNullable<Sel>): { cx: number; cy: number; hw: number; hh: number; ang: number } {
+    switch (s.kind) {
+      case "wall": { const o = this.level.walls[s.i]; return { cx: o.x, cy: o.y, hw: o.w / 2, hh: o.h / 2, ang: o.angle ?? 0 }; }
+      case "boat": { const o = this.level.boats[s.i]; return { cx: o.x, cy: o.y, hw: o.length / 2, hh: o.beam / 2, ang: o.angle }; }
+      case "rocks": { const o = this.level.rocks![s.i]; return { cx: o.x, cy: o.y, hw: o.w / 2, hh: o.h / 2, ang: o.angle ?? 0 }; }
+      case "goal": { const o = this.level.goal; return { cx: o.x, cy: o.y, hw: o.w / 2, hh: o.h / 2, ang: 0 }; }
+      case "spawn": { const o = this.level.spawn; return { cx: o.x, cy: o.y, hw: 2.5, hh: 1, ang: o.angle }; }
+      case "lighthouse": { const o = this.level.lighthouses![s.i]; const r = o.radius ?? LIGHTHOUSE_RADIUS; return { cx: o.x, cy: o.y, hw: r, hh: r, ang: 0 }; }
+      default: { const im = this.image!; return { cx: im.xM + im.widthM / 2, cy: im.yM + im.heightM / 2, hw: im.widthM / 2, hh: im.heightM / 2, ang: 0 }; }
+    }
+  }
+
+  private resizable(s: NonNullable<Sel>) {
+    return s.kind === "wall" || s.kind === "boat" || s.kind === "goal" || s.kind === "rocks";
+  }
+  private rotatable(s: NonNullable<Sel>) {
+    return s.kind === "wall" || s.kind === "boat" || s.kind === "rocks" || s.kind === "spawn";
+  }
+
+  private handles(s: NonNullable<Sel>) {
+    const g = this.geom(s);
+    const cos = Math.cos(g.ang), sin = Math.sin(g.ang);
+    const tw = (lx: number, ly: number) => ({ x: g.cx + lx * cos - ly * sin, y: g.cy + lx * sin + ly * cos });
+    const out: { type: "corner" | "rotate" | "radius"; sx: number; sy: number; x: number; y: number }[] = [];
+    if (this.resizable(s))
+      for (const sx of [-1, 1])
+        for (const sy of [-1, 1]) {
+          const p = tw(sx * g.hw, sy * g.hh);
+          out.push({ type: "corner", sx, sy, x: p.x, y: p.y });
+        }
+    if (this.rotatable(s)) {
+      const off = ROT_OFF_PX / (this.cam.zoom * P);
+      const p = tw(0, -(g.hh + off));
+      out.push({ type: "rotate", sx: 0, sy: 0, x: p.x, y: p.y });
+    }
+    if (s.kind === "lighthouse") out.push({ type: "radius", sx: 1, sy: 0, x: g.cx + g.hw, y: g.cy });
+    return out;
+  }
+
+  private hitHandle(m: { x: number; y: number }) {
+    if (!this.sel) return null;
+    const tol = HIT_PX / (this.cam.zoom * P);
+    for (const h of this.handles(this.sel)) if (Math.hypot(m.x - h.x, m.y - h.y) <= tol) return h;
+    return null;
+  }
+
+  private startHandle(h: { type: "corner" | "rotate" | "radius"; sx: number; sy: number }) {
+    this.activeHandle = h;
+    if (h.type === "corner") {
+      this.action = "resize";
+      const g = this.geom(this.sel!);
+      this.resizeAng = g.ang;
+      const cos = Math.cos(g.ang), sin = Math.sin(g.ang);
+      const flx = -h.sx * g.hw, fly = -h.sy * g.hh; // opposite (fixed) corner, local
+      this.resizeFixed = { x: g.cx + flx * cos - fly * sin, y: g.cy + flx * sin + fly * cos };
+    } else if (h.type === "rotate") this.action = "rotate";
+    else this.action = "radius";
+  }
+
+  private doResize(m: { x: number; y: number }) {
+    const ang = this.resizeAng;
+    const cosN = Math.cos(-ang), sinN = Math.sin(-ang);
+    const dx = m.x - this.resizeFixed.x, dy = m.y - this.resizeFixed.y;
+    const lx = dx * cosN - dy * sinN, ly = dx * sinN + dy * cosN; // pointer in object-aligned frame
+    let fullW = Math.max(0.5, Math.abs(lx)), fullH = Math.max(0.5, Math.abs(ly));
+    if (this.snap > 0) { fullW = Math.max(0.5, this.snapM(fullW)); fullH = Math.max(0.5, this.snapM(fullH)); }
+    const ca = Math.cos(ang), sa = Math.sin(ang);
+    const ddx = (lx < 0 ? -1 : 1) * fullW, ddy = (ly < 0 ? -1 : 1) * fullH;
+    const dragX = this.resizeFixed.x + ddx * ca - ddy * sa;
+    const dragY = this.resizeFixed.y + ddx * sa + ddy * ca;
+    this.setRect(this.sel!, (this.resizeFixed.x + dragX) / 2, (this.resizeFixed.y + dragY) / 2, fullW / 2, fullH / 2);
+  }
+
+  private doRotate(m: { x: number; y: number }) {
+    const g = this.geom(this.sel!);
+    let a = Math.atan2(m.y - g.cy, m.x - g.cx) + Math.PI / 2;
+    if (this.snap > 0) { const step = Math.PI / 12; a = Math.round(a / step) * step; } // snap to 15°
+    this.setAngle(this.sel!, a);
+  }
+
+  private doRadius(m: { x: number; y: number }) {
+    if (this.sel!.kind !== "lighthouse") return;
+    const g = this.geom(this.sel!);
+    let r = Math.hypot(m.x - g.cx, m.y - g.cy);
+    r = Math.max(1, this.snap > 0 ? this.snapM(r) : r);
+    this.level.lighthouses![this.sel!.i].radius = r;
+  }
+
+  private setRect(s: NonNullable<Sel>, cx: number, cy: number, hw: number, hh: number) {
+    if (s.kind === "wall") { const o = this.level.walls[s.i]; o.x = cx; o.y = cy; o.w = hw * 2; o.h = hh * 2; }
+    else if (s.kind === "boat") { const o = this.level.boats[s.i]; o.x = cx; o.y = cy; o.length = hw * 2; o.beam = hh * 2; }
+    else if (s.kind === "rocks") { const o = this.level.rocks![s.i]; o.x = cx; o.y = cy; o.w = hw * 2; o.h = hh * 2; }
+    else if (s.kind === "goal") { const o = this.level.goal; o.x = cx; o.y = cy; o.w = hw * 2; o.h = hh * 2; }
+  }
+
+  private setAngle(s: NonNullable<Sel>, ang: number) {
+    if (s.kind === "wall") this.level.walls[s.i].angle = ang;
+    else if (s.kind === "boat") this.level.boats[s.i].angle = ang;
+    else if (s.kind === "rocks") this.level.rocks![s.i].angle = ang;
+    else if (s.kind === "spawn") this.level.spawn.angle = ang;
+  }
+
   private selectionOverlay(s: NonNullable<Sel>): Graphics {
     const g = new Graphics();
-    let cx: number, cy: number, w: number, h: number, ang: number;
-    if (s.kind === "wall") {
-      const o = this.level.walls[s.i];
-      [cx, cy, w, h, ang] = [o.x, o.y, o.w, o.h, o.angle ?? 0];
-    } else if (s.kind === "boat") {
-      const o = this.level.boats[s.i];
-      [cx, cy, w, h, ang] = [o.x, o.y, o.length, o.beam, o.angle];
-    } else if (s.kind === "goal") {
-      const o = this.level.goal;
-      [cx, cy, w, h, ang] = [o.x, o.y, o.w, o.h, 0];
-    } else if (s.kind === "spawn") {
-      const o = this.level.spawn;
-      [cx, cy, w, h, ang] = [o.x, o.y, 5, 2, o.angle];
-    } else {
-      const im = this.image!;
-      [cx, cy, w, h, ang] = [im.xM + im.widthM / 2, im.yM + im.heightM / 2, im.widthM, im.heightM, 0];
+    const gm = this.geom(s);
+    const cos = Math.cos(gm.ang), sin = Math.sin(gm.ang);
+    const tw = (lx: number, ly: number): [number, number] => [
+      (gm.cx + lx * cos - ly * sin) * P,
+      (gm.cy + lx * sin + ly * cos) * P,
+    ];
+    const lw = 2 / this.cam.zoom;
+    const corners = [tw(-gm.hw, -gm.hh), tw(gm.hw, -gm.hh), tw(gm.hw, gm.hh), tw(-gm.hw, gm.hh)];
+    g.poly(corners.flat()).stroke({ width: lw, color: 0x2ec4b6 });
+    const hp = HANDLE_PX / this.cam.zoom;
+    for (const h of this.handles(s)) {
+      const x = h.x * P, y = h.y * P;
+      if (h.type === "corner") g.rect(x - hp / 2, y - hp / 2, hp, hp).fill(0xffffff).stroke({ width: lw, color: 0x2ec4b6 });
+      else g.circle(x, y, hp * 0.6).fill(h.type === "rotate" ? 0x2ec4b6 : 0xffffff).stroke({ width: lw, color: 0x2ec4b6 });
     }
-    g.position.set(cx * P, cy * P);
-    g.rotation = ang;
-    g.rect((-w / 2) * P - 3, (-h / 2) * P - 3, w * P + 6, h * P + 6).stroke({
-      width: 2,
-      color: 0x2ec4b6,
-    });
     return g;
   }
 
@@ -424,6 +612,8 @@ export class Editor {
         if (!lvl.bounds || !lvl.spawn || !lvl.goal || !Array.isArray(lvl.walls) || !Array.isArray(lvl.boats))
           throw new Error("bad");
         Object.assign(this.level, lvl);
+        this.level.rocks ??= [];
+        this.level.lighthouses ??= [];
         this.sel = null;
         this.fitCamera();
         this.updatePanel();
@@ -443,6 +633,8 @@ export class Editor {
       goal: { x: 78, y: 30, w: 14, h: 16 },
       walls: [],
       boats: [],
+      rocks: [],
+      lighthouses: [],
     } satisfies Level);
     this.sel = null;
     this.fitCamera();
@@ -465,6 +657,8 @@ export class Editor {
       ["boat", "⛵ Boat"],
       ["spawn", "⚑ Start"],
       ["goal", "⚓ Goal"],
+      ["rocks", "🪨 Rocks"],
+      ["lighthouse", "🗼 Lighthouse"],
       ["erase", "✕ Erase"],
       ["image", "🗺 Image"],
     ];
@@ -532,6 +726,8 @@ export class Editor {
       const lvl = sel.value && loadLevel(sel.value);
       if (lvl) {
         Object.assign(this.level, lvl);
+        this.level.rocks ??= [];
+        this.level.lighthouses ??= [];
         this.sel = null;
         this.fitCamera();
         this.updatePanel();
@@ -644,6 +840,22 @@ export class Editor {
       num("length (m)", b.length, (v) => (b.length = v), 0.5);
       num("beam (m)", b.beam, (v) => (b.beam = v), 0.5);
       num("angle (°)", deg(b.angle), (v) => (b.angle = rad(v)));
+      p.appendChild(button("Delete", () => this.deleteSel(s)));
+    } else if (s.kind === "rocks") {
+      const r = this.level.rocks![s.i];
+      p.appendChild(heading("Rocks"));
+      num("x (m)", r.x, (v) => (r.x = v));
+      num("y (m)", r.y, (v) => (r.y = v));
+      num("width (m)", r.w, (v) => (r.w = v));
+      num("height (m)", r.h, (v) => (r.h = v));
+      num("angle (°)", deg(r.angle ?? 0), (v) => (r.angle = rad(v)));
+      p.appendChild(button("Delete", () => this.deleteSel(s)));
+    } else if (s.kind === "lighthouse") {
+      const l = this.level.lighthouses![s.i];
+      p.appendChild(heading("Lighthouse"));
+      num("x (m)", l.x, (v) => (l.x = v));
+      num("y (m)", l.y, (v) => (l.y = v));
+      num("radius (m)", l.radius ?? 2.5, (v) => (l.radius = v), 0.5);
       p.appendChild(button("Delete", () => this.deleteSel(s)));
     } else if (s.kind === "goal") {
       const g = this.level.goal;
