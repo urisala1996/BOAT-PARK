@@ -18,7 +18,7 @@ export const BOAT_BEAM_M = 1.9;
 // throw hard over (~47deg) and snap quickly, and ~17 kn full-ahead. The outboard sits
 // aft of the transom, so vectored thrust there yaws the boat hard — gassing with the
 // wheel over pivots the stern out (directed-thrust / prop-walk feel).
-export const MAX_THRUST_ACCEL = 140; // forward thrust as acceleration (px/s^2)
+export const MAX_THRUST_ACCEL = 200; // forward thrust as acceleration (px/s^2) — strong, agile
 export const REVERSE_FACTOR = 0.5; // reverse is weaker than forward
 export const MOTOR_ANGLE_LIMIT = 0.82; // rad (~47deg) max outboard deflection
 export const OUTBOARD_OFFSET_M = 0.35; // motor mounted behind the transom (longer lever arm)
@@ -27,12 +27,13 @@ export const STEER_RETURN = 2.4; // rad/s the wheel eases back to centre when id
 export const THROTTLE_RATE = 3.0; // throttle units/s — fast enough to "slam" the gas
 
 // --- Hydrodynamics (drag) as acceleration coefficients ---
-// Lateral >> forward so the hull glides ahead but resists sideways slip (carved turns).
-// Lateral grip is high but not absolute, so the stern can break loose in hard turns.
-export const DRAG_FWD_LINEAR = 0.2;
-export const DRAG_FWD_QUAD = 0.0022;
-export const DRAG_LAT_LINEAR = 3.5;
-export const DRAG_LAT_QUAD = 0.018;
+// Low LINEAR forward drag so the hull glides a long way when you back off the gas (inertia);
+// QUADRATIC drag still caps top speed (~19 kn). Lateral >> forward so it tracks and carves,
+// but not absolute, so the stern can break loose in hard turns.
+export const DRAG_FWD_LINEAR = 0.05;
+export const DRAG_FWD_QUAD = 0.0032;
+export const DRAG_LAT_LINEAR = 2.6;
+export const DRAG_LAT_QUAD = 0.016;
 export const DRAG_ANGULAR = 3.4; // angular velocity damping (keeps the strong yaw controllable)
 
 // --- Damage / life ---
@@ -44,10 +45,10 @@ export const DAMAGE_SCALE = 0.4;
 
 // --- Palette (minimalist / modern) ---
 export const COLORS = {
-  water: 0x3f87bd,
-  waterTop: "#5aa7d8",
-  waterBottom: "#2c6c9c",
-  waterGrid: 0x5aa0cf,
+  water: 0x5aa7d8,
+  waterTop: "#7cbce8",
+  waterBottom: "#4f9bd0",
+  waterGrid: 0x8cc6ec,
   foam: 0xffffff,
   goal: 0x2ec4b6,
   goalSoft: 0x9fe3da,

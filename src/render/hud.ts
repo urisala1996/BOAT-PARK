@@ -247,12 +247,12 @@ export class HUD {
     const grad = new FillGradient({
       type: "radial",
       center: { x: 0.5, y: 0.5 },
-      innerRadius: 0.32,
+      innerRadius: 0.5,
       outerCenter: { x: 0.5, y: 0.5 },
-      outerRadius: 0.75,
+      outerRadius: 0.95,
       colorStops: [
         { offset: 0, color: "rgba(6,22,30,0)" },
-        { offset: 1, color: "rgba(6,22,30,0.42)" },
+        { offset: 1, color: "rgba(6,22,30,0.18)" },
       ],
       textureSpace: "local",
     });
