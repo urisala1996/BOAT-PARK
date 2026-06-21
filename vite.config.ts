@@ -1,7 +1,8 @@
 import { defineConfig } from "vite";
 
-// base must match the GitHub repo name so asset URLs resolve on GitHub Pages
-// (served from https://<user>.github.io/BOAT-PARK/).
+// Relative base so asset URLs resolve no matter what the repo is named or which
+// sub-path GitHub Pages serves from (https://<user>.github.io/<repo>/). This avoids
+// the "blank/blue page, assets 404" problem of hardcoding a repo name.
 export default defineConfig({
-  base: "/BOAT-PARK/",
+  base: "./",
 });
