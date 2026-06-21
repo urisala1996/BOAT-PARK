@@ -58,8 +58,10 @@ gauges each frame.
   `render/hudLayout.ts` is the single source of gauge positions, shared by the HUD and touch
   hit-areas so they always align.
 - **Tuning lives in one place**: `config.ts` holds every physics/feel constant (thrust, drag
-  coefficients, steering rates, damage). Tune the game here, not scattered through modules. The
-  current values target a ~10 kn full-throttle cruise.
+  coefficients, steering rates, damage). Tune the game here, not scattered through modules. Current
+  values give a punchy planing feel: ~17 kn top speed, ~0.6 g throttle shove, ~47° helm / ~85°/s
+  turn at cruise, and a strong gas-with-helm pivot (the outboard sits aft of the transom via
+  `OUTBOARD_OFFSET_M` for a longer yaw lever arm).
 - **Steering sign**: positive `motorAngle` turns the bow to port; `D`/right deflects it negative.
   This is derived in `Boat.update` — keep the HUD wheel rotation and physics consistent if changed.
 - **Levels are plain data** (`level/types.ts` `Level`). `level/level1.ts` is the current marina.

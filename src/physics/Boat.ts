@@ -3,12 +3,13 @@ import {
   MAX_THRUST_ACCEL,
   REVERSE_FACTOR,
   MOTOR_ANGLE_LIMIT,
+  OUTBOARD_OFFSET_M,
   STEER_RATE,
   STEER_RETURN,
   THROTTLE_RATE,
   PIXELS_PER_METER,
 } from "../config.ts";
-import { hullVertices, STERN_LOCAL } from "./hull.ts";
+import { hullVertices } from "./hull.ts";
 import { computeHydroDrag } from "./hydro.ts";
 import { applyWrench } from "./integrator.ts";
 import type { InputState } from "../input/controls.ts";
@@ -23,12 +24,14 @@ const MS_TO_KNOTS = 1.94384;
 export class Boat {
   readonly body: Matter.Body;
   readonly lengthPx: number;
+  readonly thrustOffsetPx: number; // distance aft of centre where the prop thrust acts
 
   motorAngle = 0; // radians relative to hull, +/- MOTOR_ANGLE_LIMIT
   throttle = 0; // -1..1 lever position
 
   constructor(xPx: number, yPx: number, angle: number, lengthM: number, beamM: number) {
     this.lengthPx = lengthM * PIXELS_PER_METER;
+    this.thrustOffsetPx = this.lengthPx / 2 + OUTBOARD_OFFSET_M * PIXELS_PER_METER;
     const beamPx = beamM * PIXELS_PER_METER;
     const verts = hullVertices(this.lengthPx, beamPx);
     this.body = Matter.Bodies.fromVertices(xPx, yPx, [verts], {
@@ -75,10 +78,10 @@ export class Boat {
     const fx = fMag * Math.cos(dir);
     const fy = fMag * Math.sin(dir);
 
-    // Thrust acts at the stern, offset from the centre of mass => steering torque.
-    const stern = STERN_LOCAL(this.lengthPx);
-    const rx = stern.x * Math.cos(a) - stern.y * Math.sin(a);
-    const ry = stern.x * Math.sin(a) + stern.y * Math.cos(a);
+    // Thrust acts behind the transom, offset from the centre of mass => steering torque.
+    // The longer this lever arm, the harder the boat pivots when the helm is over.
+    const rx = -this.thrustOffsetPx * Math.cos(a);
+    const ry = -this.thrustOffsetPx * Math.sin(a);
     const thrustTorque = rx * fy - ry * fx;
 
     // --- Water resistance ---

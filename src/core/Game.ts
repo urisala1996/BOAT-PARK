@@ -64,8 +64,15 @@ export class Game {
 
     // Dev-only probe for automated verification; stripped from production builds.
     if (import.meta.env.DEV) {
-      (window as unknown as { __boatSpeed?: () => number }).__boatSpeed = () =>
-        this.boat.speedKnots;
+      (window as unknown as { __boat?: () => unknown }).__boat = () => ({
+        kn: this.boat.speedKnots,
+        angleDeg: (this.boat.body.angle * 180) / Math.PI,
+        yawRateDegPerSec: (this.boat.body.angularVelocity * 60 * 180) / Math.PI,
+        x: this.boat.body.position.x,
+        y: this.boat.body.position.y,
+        throttle: this.boat.throttle,
+        motorDeg: (this.boat.motorAngle * 180) / Math.PI,
+      });
     }
 
     this.loop = new GameLoop(

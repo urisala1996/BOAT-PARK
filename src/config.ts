@@ -14,28 +14,33 @@ export const BOAT_LENGTH_M = 5;
 export const BOAT_BEAM_M = 1.9;
 
 // --- Engine / controls ---
-// Tuned for a ~10 knot full-throttle cruise (≈122 px/s) with a weighty, inertial feel.
-export const MAX_THRUST_ACCEL = 60; // forward thrust as acceleration (px/s^2)
-export const REVERSE_FACTOR = 0.45; // reverse is weaker than forward
-export const MOTOR_ANGLE_LIMIT = 0.6; // rad (~34deg) max outboard deflection
-export const STEER_RATE = 1.8; // rad/s the wheel turns the motor
-export const STEER_RETURN = 1.2; // rad/s the wheel eases back to centre when idle
-export const THROTTLE_RATE = 0.8; // throttle units/s the lever moves (range -1..1)
+// Punchy, planing-boat feel: a strong shove on the throttle (~0.6 g), a helm you can
+// throw hard over (~47deg) and snap quickly, and ~17 kn full-ahead. The outboard sits
+// aft of the transom, so vectored thrust there yaws the boat hard — gassing with the
+// wheel over pivots the stern out (directed-thrust / prop-walk feel).
+export const MAX_THRUST_ACCEL = 140; // forward thrust as acceleration (px/s^2)
+export const REVERSE_FACTOR = 0.5; // reverse is weaker than forward
+export const MOTOR_ANGLE_LIMIT = 0.82; // rad (~47deg) max outboard deflection
+export const OUTBOARD_OFFSET_M = 0.35; // motor mounted behind the transom (longer lever arm)
+export const STEER_RATE = 3.2; // rad/s the wheel turns the motor (snappy)
+export const STEER_RETURN = 2.4; // rad/s the wheel eases back to centre when idle
+export const THROTTLE_RATE = 3.0; // throttle units/s — fast enough to "slam" the gas
 
 // --- Hydrodynamics (drag) as acceleration coefficients ---
 // Lateral >> forward so the hull glides ahead but resists sideways slip (carved turns).
-export const DRAG_FWD_LINEAR = 0.15;
-export const DRAG_FWD_QUAD = 0.0028;
-export const DRAG_LAT_LINEAR = 4.0;
-export const DRAG_LAT_QUAD = 0.02;
-export const DRAG_ANGULAR = 2.4; // angular velocity damping
+// Lateral grip is high but not absolute, so the stern can break loose in hard turns.
+export const DRAG_FWD_LINEAR = 0.2;
+export const DRAG_FWD_QUAD = 0.0022;
+export const DRAG_LAT_LINEAR = 3.5;
+export const DRAG_LAT_QUAD = 0.018;
+export const DRAG_ANGULAR = 3.4; // angular velocity damping (keeps the strong yaw controllable)
 
 // --- Damage / life ---
 export const MAX_LIFE = 100;
-// Impact speed (px/s along the contact normal) below which contact is harmless,
-// so careful docking never costs life (~1.2 kn).
-export const DAMAGE_THRESHOLD = 30;
-export const DAMAGE_SCALE = 0.6;
+// Impact speed (px/s along the contact normal) below which contact is harmless, so careful
+// docking never costs life (~1.8 kn). Scale eased a touch since cruise speeds are higher now.
+export const DAMAGE_THRESHOLD = 45;
+export const DAMAGE_SCALE = 0.4;
 
 // --- Palette (minimalist / modern) ---
 export const COLORS = {
