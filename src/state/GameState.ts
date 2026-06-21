@@ -1,14 +1,24 @@
 import { MAX_LIFE } from "../config.ts";
 
-export type Status = "playing" | "won" | "lost";
+export type Status = "ready" | "playing" | "won" | "lost";
 
 export class GameState {
   life = MAX_LIFE;
-  status: Status = "playing";
+  status: Status = "ready";
+  elapsedMs = 0; // time spent actually playing this run
 
   reset() {
     this.life = MAX_LIFE;
-    this.status = "playing";
+    this.status = "ready";
+    this.elapsedMs = 0;
+  }
+
+  start() {
+    if (this.status === "ready") this.status = "playing";
+  }
+
+  tick(dtMs: number) {
+    if (this.status === "playing") this.elapsedMs += dtMs;
   }
 
   damage(amount: number) {
@@ -23,5 +33,9 @@ export class GameState {
 
   get lifeFraction(): number {
     return this.life / MAX_LIFE;
+  }
+
+  get elapsedSeconds(): number {
+    return this.elapsedMs / 1000;
   }
 }

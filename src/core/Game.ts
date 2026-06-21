@@ -14,11 +14,14 @@ import { makeWall, makeObstacleBoat, makeGoal } from "../entities/bodies.ts";
 import {
   buildWater,
   buildGoal,
+  buildBuoys,
   buildWall,
   buildObstacleBoat,
   buildPlayer,
   type PlayerView,
+  type GoalView,
 } from "../render/views.ts";
+import { Wake } from "../render/wake.ts";
 import { HUD } from "../render/hud.ts";
 
 export class Game {
@@ -30,9 +33,12 @@ export class Game {
   private readonly scene = new Container(); // level-specific views, cleared on restart
   private readonly loop: GameLoop;
 
+  private readonly wake = new Wake();
   private boat!: Boat;
   private playerView!: PlayerView;
+  private goalView!: GoalView;
   private restartArmed = true;
+  private clock = 0; // real seconds, for animation
 
   constructor(
     private readonly renderer: Renderer,
@@ -47,9 +53,10 @@ export class Game {
     renderer.app.renderer.on("resize", () =>
       this.pointer.resize(renderer.width, renderer.height),
     );
-    // Tap anywhere to restart once the round is over (mobile-friendly).
+    // Tap to start from the title, or to restart once the round is over (mobile-friendly).
     renderer.app.stage.on("pointertap", () => {
-      if (this.state.status !== "playing") this.build();
+      if (this.state.status === "ready") this.state.start();
+      else if (this.state.status !== "playing") this.build();
     });
 
     // Player is identified by reference; rebuilt on restart, so check the live body.
@@ -62,9 +69,10 @@ export class Game {
 
     this.build();
 
-    // Dev-only probe for automated verification; stripped from production builds.
+    // Dev-only probes for automated verification; stripped from production builds.
     if (import.meta.env.DEV) {
-      (window as unknown as { __boat?: () => unknown }).__boat = () => ({
+      const win = window as unknown as Record<string, unknown>;
+      win.__boat = () => ({
         kn: this.boat.speedKnots,
         angleDeg: (this.boat.body.angle * 180) / Math.PI,
         yawRateDegPerSec: (this.boat.body.angularVelocity * 60 * 180) / Math.PI,
@@ -73,6 +81,14 @@ export class Game {
         throttle: this.boat.throttle,
         motorDeg: (this.boat.motorAngle * 180) / Math.PI,
       });
+      win.__forceWin = () => {
+        this.state.status = "playing";
+        this.state.win();
+      };
+      win.__forceLose = () => {
+        this.state.status = "playing";
+        this.state.damage(9999);
+      };
     }
 
     this.loop = new GameLoop(
@@ -89,7 +105,9 @@ export class Game {
     this.state.reset();
 
     this.scene.addChild(buildWater(lv));
-    this.scene.addChild(buildGoal(lv.goal));
+    this.goalView = buildGoal(lv.goal);
+    this.scene.addChild(this.goalView.container);
+    this.scene.addChild(buildBuoys(lv.goal));
     this.physics.add(makeGoal(lv.goal));
 
     for (const wall of lv.walls) {
@@ -100,6 +118,9 @@ export class Game {
       this.physics.add(makeObstacleBoat(def));
       this.scene.addChild(buildObstacleBoat(def));
     }
+
+    this.wake.reset();
+    this.scene.addChild(this.wake.container);
 
     this.boat = new Boat(
       lv.spawn.x * P,
@@ -114,6 +135,7 @@ export class Game {
   }
 
   private update(dt: number) {
+    this.clock += dt;
     const input = this.controls.read();
     input.steerSet = this.pointer.steerSet;
     input.throttleSet = this.pointer.throttleSet;
@@ -127,9 +149,14 @@ export class Game {
       this.restartArmed = true;
     }
 
+    // Any control input leaves the title screen and gets under way.
+    if (this.state.status === "ready" && hasInput(input)) this.state.start();
+
     if (this.state.status === "playing") {
       this.boat.update(dt, input);
       this.physics.step(1000 / 60);
+      this.state.tick(dt * 1000);
+      this.wake.update(this.boat, dt);
     } else {
       // Let momentum bleed off after the round ends so it settles gracefully.
       Matter.Body.setVelocity(this.boat.body, {
@@ -145,6 +172,7 @@ export class Game {
     this.playerView.container.position.set(b.position.x, b.position.y);
     this.playerView.container.rotation = b.angle;
     this.playerView.motor.rotation = this.boat.motorAngle;
+    this.goalView.update(this.clock);
 
     this.renderer.follow(
       b.position.x,
@@ -152,6 +180,38 @@ export class Game {
       this.level.bounds.w * P,
       this.level.bounds.h * P,
     );
-    this.hud.update(this.state, this.boat, this.renderer.width, this.renderer.height);
+
+    // Goal position in screen space, for the off-screen direction arrow.
+    const z = this.renderer.zoom;
+    const gx = this.renderer.world.position.x + this.level.goal.x * P * z;
+    const gy = this.renderer.world.position.y + this.level.goal.y * P * z;
+    const m = 70;
+    const onScreen =
+      gx > m && gx < this.renderer.width - m && gy > m && gy < this.renderer.height - m;
+
+    this.hud.update({
+      state: this.state,
+      boat: this.boat,
+      w: this.renderer.width,
+      h: this.renderer.height,
+      t: this.clock,
+      goal: { x: gx, y: gy, onScreen },
+    });
   }
+}
+
+function hasInput(i: {
+  steer: number;
+  throttle: number;
+  neutral: boolean;
+  steerSet: number | null;
+  throttleSet: number | null;
+}): boolean {
+  return (
+    i.steer !== 0 ||
+    i.throttle !== 0 ||
+    i.neutral ||
+    i.steerSet != null ||
+    i.throttleSet != null
+  );
 }

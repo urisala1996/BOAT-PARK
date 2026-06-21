@@ -46,8 +46,15 @@ Flow per fixed step (`core/Game.ts` → `core/GameLoop.ts`, fixed 60 Hz accumula
 Rendering is separate from simulation. `render/Renderer.ts` owns the PixiJS app and two layers: a
 camera-transformed `world` (follows the boat, clamped to bounds) and a fixed `hud`. `render/views.ts`
 builds vector Graphics that **reuse the exact hull geometry from `physics/hull.ts`**, so visuals and
-collision shapes always match. `render/hud.ts` redraws the life bar, speed, and the throttle/steering
-gauges each frame.
+collision shapes always match; it also adds drop shadows, a water gradient, the animated goal zone,
+and harbour buoys. `render/wake.ts` is a fading foam ribbon trailing the stern (world layer, under
+the boat). `render/hud.ts` redraws everything in the fixed overlay each frame from a single
+`HudFrame`: vignette, hull panel, speedometer, objective banner + off-screen goal arrow, the
+throttle/helm gauges (which double as touch controls), and the start / win / lose cards.
+
+Game flow has four states (`state/GameState.ts`): `ready` (title card; any input or tap starts and
+the run timer begins) → `playing` → `won` / `lost` (card with stats + restart). `Game` drives the
+state transitions, the wake, the animated goal, and computes the goal's screen position for the arrow.
 
 ### Key conventions
 - **Units**: gameplay data (`level/`) is authored in METRES; everything physics/render works in
