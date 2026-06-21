@@ -18,9 +18,21 @@ export class PointerControls {
   private w = 0;
   private h = 0;
 
+  private readonly onMove = (e: FederatedPointerEvent) => {
+    if (e.pointerId === this.throttlePointer) this.updateThrottle(e.global.y);
+    if (e.pointerId === this.steerPointer) this.updateSteer(e.global.x);
+  };
+  private readonly onRelease = (e: FederatedPointerEvent) => {
+    if (e.pointerId === this.throttlePointer) this.throttlePointer = null;
+    if (e.pointerId === this.steerPointer) {
+      this.steerPointer = null;
+      this.steerSet = null; // let go of the wheel -> auto-centre
+    }
+  };
+
   constructor(
     private readonly app: Application,
-    hud: Container,
+    private readonly hud: Container,
   ) {
     for (const z of [this.throttleZone, this.steerZone]) {
       z.eventMode = "static";
@@ -37,20 +49,20 @@ export class PointerControls {
     });
 
     app.stage.eventMode = "static";
-    app.stage.on("globalpointermove", (e: FederatedPointerEvent) => {
-      if (e.pointerId === this.throttlePointer) this.updateThrottle(e.global.y);
-      if (e.pointerId === this.steerPointer) this.updateSteer(e.global.x);
-    });
-    const release = (e: FederatedPointerEvent) => {
-      if (e.pointerId === this.throttlePointer) this.throttlePointer = null;
-      if (e.pointerId === this.steerPointer) {
-        this.steerPointer = null;
-        this.steerSet = null; // let go of the wheel -> auto-centre
-      }
-    };
-    app.stage.on("pointerup", release);
-    app.stage.on("pointerupoutside", release);
-    app.stage.on("pointercancel", release);
+    app.stage.on("globalpointermove", this.onMove);
+    app.stage.on("pointerup", this.onRelease);
+    app.stage.on("pointerupoutside", this.onRelease);
+    app.stage.on("pointercancel", this.onRelease);
+  }
+
+  dispose() {
+    this.app.stage.off("globalpointermove", this.onMove);
+    this.app.stage.off("pointerup", this.onRelease);
+    this.app.stage.off("pointerupoutside", this.onRelease);
+    this.app.stage.off("pointercancel", this.onRelease);
+    this.hud.removeChild(this.throttleZone, this.steerZone);
+    this.throttleZone.destroy();
+    this.steerZone.destroy();
   }
 
   resize(w: number, h: number) {

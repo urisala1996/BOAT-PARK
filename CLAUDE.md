@@ -71,9 +71,22 @@ state transitions, the wake, the animated goal, and computes the goal's screen p
   `OUTBOARD_OFFSET_M` for a longer yaw lever arm).
 - **Steering sign**: positive `motorAngle` turns the bow to port; `D`/right deflects it negative.
   This is derived in `Boat.update` — keep the HUD wheel rotation and physics consistent if changed.
-- **Levels are plain data** (`level/types.ts` `Level`). `level/level1.ts` is the current marina.
-  New levels can be added as JSON matching that shape and loaded the same way (a `levels/` folder is
-  the intended next step). The loader logic lives inline in `Game.build()`.
+- **Levels are plain data** (`level/types.ts` `Level`, all metres). `level/level1.ts` is the built-in
+  marina; `Game.build()` instantiates whatever `Level` it's handed. Custom levels persist in
+  `localStorage` via `level/storage.ts` (named levels + a "current" working level).
+
+### Modes (`core/App.ts`)
+`App` owns the renderer and swaps between **Play** (`Game`) and **Edit** (`editor/Editor.ts`); both
+implement `dispose()` so switching cleanly tears down ticker callbacks, stage listeners, and layers.
+The bottom "✎ Editor" button enters the editor; the editor's "▶ Play" returns. The app boots into
+the saved current level if present, else the built-in marina.
+
+### Level editor (`editor/Editor.ts`)
+A single module: renders the editable level into `renderer.world` (rebuilt on each change, reusing
+the `render/views.ts` builders) with its own pan/zoom camera, and overlays plain-DOM tools + a
+properties panel. You can trace a loaded map image (faint underlay, set its width in metres),
+draw docks/land/goal by drag, click-place boats and the start slip, select/move objects, fine-tune
+via the panel, grid-snap, and save / load / import / export JSON. It autosaves to `localStorage`.
 
 ## Deploy
 

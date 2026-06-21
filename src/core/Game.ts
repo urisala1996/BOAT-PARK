@@ -39,6 +39,12 @@ export class Game {
   private goalView!: GoalView;
   private restartArmed = true;
   private clock = 0; // real seconds, for animation
+  private readonly tickerFn: (t: { deltaMS: number }) => void;
+  private readonly resizeFn = () => this.pointer.resize(this.renderer.width, this.renderer.height);
+  private readonly tapFn = () => {
+    if (this.state.status === "ready") this.state.start();
+    else if (this.state.status !== "playing") this.build();
+  };
 
   constructor(
     private readonly renderer: Renderer,
@@ -50,14 +56,9 @@ export class Game {
     // Touch / mouse controls, kept sized to the viewport.
     this.pointer = new PointerControls(renderer.app, renderer.hud);
     this.pointer.resize(renderer.width, renderer.height);
-    renderer.app.renderer.on("resize", () =>
-      this.pointer.resize(renderer.width, renderer.height),
-    );
+    renderer.app.renderer.on("resize", this.resizeFn);
     // Tap to start from the title, or to restart once the round is over (mobile-friendly).
-    renderer.app.stage.on("pointertap", () => {
-      if (this.state.status === "ready") this.state.start();
-      else if (this.state.status !== "playing") this.build();
-    });
+    renderer.app.stage.on("pointertap", this.tapFn);
 
     // Player is identified by reference; rebuilt on restart, so check the live body.
     attachCollisions(
@@ -95,7 +96,17 @@ export class Game {
       (dt) => this.update(dt),
       () => this.render(),
     );
-    renderer.app.ticker.add((t) => this.loop.frame(t.deltaMS));
+    this.tickerFn = (t) => this.loop.frame(t.deltaMS);
+    renderer.app.ticker.add(this.tickerFn);
+  }
+
+  dispose() {
+    this.renderer.app.ticker.remove(this.tickerFn);
+    this.renderer.app.renderer.off("resize", this.resizeFn);
+    this.renderer.app.stage.off("pointertap", this.tapFn);
+    this.pointer.dispose();
+    this.renderer.world.removeChild(this.scene);
+    this.renderer.hud.removeChild(this.hud.container);
   }
 
   private build() {

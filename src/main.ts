@@ -1,13 +1,12 @@
 import { Renderer } from "./render/Renderer.ts";
-import { Game } from "./core/Game.ts";
-import { level1 } from "./level/level1.ts";
+import { App } from "./core/App.ts";
 
 async function main() {
   const mount = document.getElementById("app");
   if (!mount) throw new Error("#app mount not found");
 
   const renderer = await Renderer.create(mount);
-  new Game(renderer, level1);
+  new App(renderer);
 }
 
 main();
