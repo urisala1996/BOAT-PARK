@@ -38,6 +38,7 @@ interface ImageMeta {
 
 export interface EditorOptions {
   onPlay: (level: Level) => void;
+  onMenu: () => void;
 }
 
 const IMG_KEY = "boatpark.image.v1";
@@ -497,6 +498,7 @@ export class Editor {
     bar.appendChild(button("Save", () => this.saveNamed()));
     bar.appendChild(this.buildLoadSelect());
     bar.appendChild(sep());
+    bar.appendChild(button("≡ Menu", () => this.opts.onMenu()));
     const play = button("▶ Play", () => this.opts.onPlay(structuredClone(this.level)));
     play.className = "ed-play";
     bar.appendChild(play);

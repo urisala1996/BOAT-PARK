@@ -76,10 +76,16 @@ state transitions, the wake, the animated goal, and computes the goal's screen p
   `localStorage` via `level/storage.ts` (named levels + a "current" working level).
 
 ### Modes (`core/App.ts`)
-`App` owns the renderer and swaps between **Play** (`Game`) and **Edit** (`editor/Editor.ts`); both
-implement `dispose()` so switching cleanly tears down ticker callbacks, stage listeners, and layers.
-The bottom "✎ Editor" button enters the editor; the editor's "▶ Play" returns. The app boots into
-the saved current level if present, else the built-in marina.
+`App` owns the renderer and swaps between three modes — **Menu** (`core/MainMenu.ts`), **Play**
+(`Game`), **Edit** (`editor/Editor.ts`) — each owning its own DOM/Pixi and implementing `dispose()`
+so switching cleanly tears down ticker callbacks, stage listeners, and layers. Boots into the menu.
+In-play, fixed "≡ Menu" / "✎ Editor" buttons switch modes.
+
+### Maps & menu (`level/maps.ts`, `core/MainMenu.ts`)
+The menu lists selectable maps: the built-in default (`level1`), **bundled** maps from `/maps/*.json`
+(committed to the repo, inlined at build via `import.meta.glob`, titled from the filename), and the
+player's **saved** levels from `localStorage`. You can play any, play a **random** one, or open any in
+the editor. To ship a new port: export JSON from the editor and drop it in `maps/`.
 
 ### Level editor (`editor/Editor.ts`)
 A single module: renders the editable level into `renderer.world` (rebuilt on each change, reusing
