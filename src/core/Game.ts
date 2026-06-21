@@ -39,11 +39,17 @@ export class Game {
   private goalView!: GoalView;
   private restartArmed = true;
   private clock = 0; // real seconds, for animation
+  private zoom = 1;
+  private readonly zoomButtons: HTMLButtonElement[];
   private readonly tickerFn: (t: { deltaMS: number }) => void;
   private readonly resizeFn = () => this.pointer.resize(this.renderer.width, this.renderer.height);
   private readonly tapFn = () => {
     if (this.state.status === "ready") this.state.start();
     else if (this.state.status !== "playing") this.build();
+  };
+  private readonly onZoomKey = (e: KeyboardEvent) => {
+    if (e.key === "+" || e.key === "=") this.changeZoom(1.25);
+    else if (e.key === "-" || e.key === "_") this.changeZoom(1 / 1.25);
   };
 
   constructor(
@@ -59,6 +65,17 @@ export class Game {
     renderer.app.renderer.on("resize", this.resizeFn);
     // Tap to start from the title, or to restart once the round is over (mobile-friendly).
     renderer.app.stage.on("pointertap", this.tapFn);
+
+    // Camera zoom: start further out on phones (a marina is too close at 1:1), with on-screen
+    // +/- controls (and +/- keys on desktop).
+    const isMobile =
+      (window.matchMedia?.("(pointer: coarse)")?.matches ?? false) ||
+      Math.min(renderer.width, renderer.height) < 640;
+    this.zoom = isMobile ? 0.6 : 1;
+    renderer.zoom = this.zoom;
+    this.zoomButtons = makeZoomButtons((f) => this.changeZoom(f));
+    this.zoomButtons.forEach((b) => document.body.appendChild(b));
+    window.addEventListener("keydown", this.onZoomKey);
 
     // Player is identified by reference; rebuilt on restart, so check the live body.
     attachCollisions(
@@ -104,9 +121,16 @@ export class Game {
     this.renderer.app.ticker.remove(this.tickerFn);
     this.renderer.app.renderer.off("resize", this.resizeFn);
     this.renderer.app.stage.off("pointertap", this.tapFn);
+    window.removeEventListener("keydown", this.onZoomKey);
+    this.zoomButtons.forEach((b) => b.remove());
     this.pointer.dispose();
     this.renderer.world.removeChild(this.scene);
     this.renderer.hud.removeChild(this.hud.container);
+  }
+
+  private changeZoom(factor: number) {
+    this.zoom = Math.max(0.4, Math.min(1.8, this.zoom * factor));
+    this.renderer.zoom = this.zoom;
   }
 
   private build() {
@@ -225,4 +249,19 @@ function hasInput(i: {
     i.steerSet != null ||
     i.throttleSet != null
   );
+}
+
+function makeZoomButtons(onZoom: (factor: number) => void): HTMLButtonElement[] {
+  const mk = (label: string, top: number, factor: number) => {
+    const b = document.createElement("button");
+    b.textContent = label;
+    b.style.cssText =
+      `position:fixed;right:12px;top:${top}px;z-index:20;width:42px;height:42px;` +
+      "border:none;border-radius:50%;background:rgba(255,255,255,0.92);color:#18242b;" +
+      "font:700 24px system-ui,sans-serif;line-height:1;cursor:pointer;" +
+      "box-shadow:0 2px 8px rgba(12,34,48,0.25);touch-action:manipulation;";
+    b.onclick = () => onZoom(factor);
+    return b;
+  };
+  return [mk("+", 74, 1.25), mk("−", 124, 1 / 1.25)];
 }

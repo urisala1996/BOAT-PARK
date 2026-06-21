@@ -90,13 +90,15 @@ function injectStyle() {
 .mm-card{position:relative;width:min(92vw,440px);max-height:88vh;display:flex;flex-direction:column;
   background:#fff;border-radius:22px;padding:22px 22px 18px;box-shadow:0 12px 40px rgba(7,23,31,0.35);overflow:hidden}
 .mm-bar{position:absolute;top:0;left:0;right:0;height:8px;background:#2ec4b6}
-.mm-title{margin:8px 0 2px;font-size:34px;font-weight:800;color:#18242b;letter-spacing:.5px}
+.mm-title{margin:8px 0 2px;font-size:clamp(26px,7vw,34px);font-weight:800;color:#18242b;letter-spacing:.5px}
 .mm-sub{margin:0 0 14px;color:#6b8290;font-weight:600;font-size:14px}
 .mm-list{overflow-y:auto;display:flex;flex-direction:column;gap:8px;padding-right:2px}
 .mm-row{display:flex;align-items:center;gap:10px;padding:12px 12px;border:1px solid #e2e9ec;border-radius:12px;
   cursor:pointer;background:#fff;transition:background .12s,border-color .12s}
 .mm-row:hover{background:#f1f8f7;border-color:#2ec4b6}
-.mm-name{flex:1;font-weight:700;color:#18242b;font-size:15px}
+.mm-name{flex:1;min-width:0;font-weight:700;color:#18242b;font-size:15px;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mm-tag{flex:none}
 .mm-tag{font-size:11px;font-weight:700;padding:3px 8px;border-radius:20px;color:#fff}
 .mm-tag-default{background:#6b8290}.mm-tag-bundled{background:#2ec4b6}.mm-tag-saved{background:#f3a712}
 .mm-edit{border:1px solid #d4dde2;background:#fff;border-radius:8px;width:32px;height:32px;cursor:pointer;

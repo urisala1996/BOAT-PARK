@@ -73,8 +73,9 @@ export class HUD {
     const { state, boat, w } = f;
     const g = this.g;
     const show = playing;
-    for (const tx of [this.hullLabel, this.speedNum, this.speedUnit, this.objective, this.timer])
-      tx.visible = show;
+    const showObjective = show && f.w >= 520; // hide the centre banner on narrow phones
+    for (const tx of [this.hullLabel, this.speedNum, this.speedUnit, this.timer]) tx.visible = show;
+    this.objective.visible = showObjective;
     if (!show) return;
 
     // Hull panel
@@ -111,13 +112,15 @@ export class HUD {
     this.speedUnit.text = "kn";
     this.speedUnit.position.set(sx + 14 + this.speedNum.width + 6, sy + 26);
 
-    // Objective banner (top centre)
-    this.objective.text = "Reach the seaport";
-    const ow = this.objective.width + 52;
-    const ox = (w - ow) / 2;
-    panel(g, ox, 18, ow, 38);
-    anchorIcon(g, ox + 22, 37);
-    this.objective.position.set(ox + 38, 28);
+    // Objective banner (top centre) — only when there's room
+    if (showObjective) {
+      this.objective.text = "Reach the seaport";
+      const ow = this.objective.width + 52;
+      const ox = (w - ow) / 2;
+      panel(g, ox, 18, ow, 38);
+      anchorIcon(g, ox + 22, 37);
+      this.objective.position.set(ox + 38, 28);
+    }
 
     // Timer pill (top right)
     const tw = 86;
@@ -194,10 +197,11 @@ export class HUD {
     const g = this.g;
     g.rect(0, 0, w, h).fill({ color: 0x07171f, alpha: 0.55 });
 
-    const cw = Math.min(w * 0.88, 460);
-    const ch = 300;
+    const cw = Math.min(w * 0.9, 440);
+    const ch = Math.min(h * 0.86, 330);
     const cx = (w - cw) / 2;
     const cy = (h - ch) / 2;
+    const wrap = cw - 44;
     g.roundRect(cx + 4, cy + 8, cw, ch, 22).fill({ color: COLORS.shadow, alpha: 0.35 }); // card shadow
     g.roundRect(cx, cy, cw, ch, 22).fill(COLORS.panel);
     g.roundRect(cx, cy, cw, 8, 22).fill(
@@ -208,37 +212,40 @@ export class HUD {
     const ready = state.status === "ready";
     const won = state.status === "won";
 
+    fs(this.title, Math.min(46, cw * 0.12));
     this.title.text = ready ? "PARKING BOAT" : won ? "DOCKED!" : "HULL BREACHED";
     this.title.style.fill = ready ? COLORS.hud : won ? COLORS.lifeGood : COLORS.playerAccent;
-    this.title.style.fontSize = Math.min(56, cw * 0.13);
-    this.title.position.set(midX, cy + 64);
+    this.title.position.set(midX, cy + ch * 0.22);
 
     this.subtitle.visible = ready;
     if (ready) {
+      setWrap(this.subtitle, wrap);
       this.subtitle.text = "Ease out of the slip and dock at the seaport";
-      this.subtitle.position.set(midX, cy + 104);
+      this.subtitle.position.set(midX, cy + ch * 0.4);
     }
 
     this.stat.visible = !ready;
     if (!ready) {
+      setWrap(this.stat, wrap);
       this.stat.text = won
         ? `Time ${fmtTime(state.elapsedSeconds)}   ·   Hull ${Math.round(state.lifeFraction * 100)}%`
         : "The hull took too much damage";
-      this.stat.position.set(midX, cy + 116);
+      this.stat.position.set(midX, cy + ch * 0.42);
     }
 
     // Button
-    const bw = 200,
+    const bw = Math.min(220, cw - 80),
       bh = 52;
     const bx = midX - bw / 2,
-      by = cy + ch - 104;
+      by = cy + ch * 0.72 - bh / 2;
     g.roundRect(bx, by, bw, bh, 14).fill(won || ready ? COLORS.goal : COLORS.playerAccent);
     g.roundRect(bx, by, bw, bh / 2, 14).fill({ color: 0xffffff, alpha: 0.12 });
     this.btn.text = ready ? "START" : "PLAY AGAIN";
     this.btn.position.set(midX, by + bh / 2);
 
+    setWrap(this.hint, wrap);
     this.hint.text = ready ? "Touch the gauges, or use W A S D" : "Tap anywhere or press R";
-    this.hint.position.set(midX, cy + ch - 30);
+    this.hint.position.set(midX, cy + ch * 0.9);
   }
 
   private drawVignette(w: number, h: number) {
@@ -297,4 +304,14 @@ function mk(size: number, weight: string, fill: number, anchor = 0): Text {
 
 function clamp(v: number, lo: number, hi: number): number {
   return v < lo ? lo : v > hi ? hi : v;
+}
+
+function fs(t: Text, size: number) {
+  if (t.style.fontSize !== size) t.style.fontSize = size;
+}
+
+function setWrap(t: Text, width: number) {
+  t.style.wordWrap = true;
+  t.style.wordWrapWidth = width;
+  t.style.align = "center";
 }
